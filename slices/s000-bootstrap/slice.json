@@ -1,0 +1,12 @@
+{
+  "schema": 3,
+  "slice_id": "s000-bootstrap",
+  "title": "Specify the Omarchy v3.0 stage-pipeline kernel (bootstrap slice)",
+  "base_ref": "v2.3.1-attempt1",
+  "challenger_seat": "knuth",
+  "qa_seats": ["knuth"],
+  "test_command": [["python3", "-m", "pytest", "-q"]],
+  "context_files": [],
+  "num_ctx": 32768,
+  "max_packets": 4
+}
