@@ -38,7 +38,7 @@ Theme (Strategic Multi-Sprint Pillar)
 | **Theme** | Strategic initiative or broad focus area spanning multiple milestones. | Human + Grand Council |
 | **Epic** | Large body of work spanning multiple sprints that breaks down into features. | Cloud Grand Council |
 | **Feature** | Distinct product capability mapped to specific source modules. | `dhh` / `linus` / `carmack` |
-| **User Story** | Smallest unit of user-visible value, written with deterministic **Given-When-Then** acceptance criteria. | `dhh` + `mitnick` |
+| **User Story** | Smallest unit of user-visible value, written with deterministic **Given-When-Then** acceptance criteria. | optional `dhh` + Core `moxie` (`g4_test`) |
 | **Task (Rule 11 Packet)** | Granular technical slice (writing a class, adding unit tests, updating a script) executed by `qweny` and peer-reviewed by `moxie`. | `qweny` + `moxie` |
 
 ---
@@ -50,7 +50,7 @@ A User Story is **only** marked `Done` in [`docs/SPRINT_DASHBOARD.md`](SPRINT_DA
 - [ ] **1. Spec Link:** Linked to a `UC-XX` / `US-XX` with `Given / When / Then` acceptance criteria.
 - [ ] **2. Local Provenance (`G0`):** Implemented via `scripts/run_local_agent.sh` with matching `packet_sha256` and `output_sha256` in `.omarchy/local-agent-proof.log`.
 - [ ] **3. Testing Jig Green (`G1`):** Unit test suite 100% passing (`0` failures, `0` errors) and module coverage recorded in `docs/TESTING_JIG_REPORT.md`.
-- [ ] **4. Fail-Closed Negative Tests (`G4-Test`):** `mitnick` adversarial/corrupt/missing-input tests exist and pass.
+- [ ] **4. Fail-Closed Negative Tests (`G4-Test`):** `moxie` (`g4_test` role) adversarial/corrupt/missing-input tests exist and pass.
 - [ ] **5. Cross-Family Peer Review (`G5`):** `moxie` (opposite local model family from coder) emitted `OMARCHY_VERDICT: APPROVE`.
 - [ ] **6. Cloud Structural Gate (`G3`/`G4`):** `linus` (+ `carmack` on hot-path / `dhh` on UI) emitted `OMARCHY_VERDICT: APPROVE`.
 - [ ] **7. Hardware Honesty:** Either verified on target hardware in `docs/EVIDENCE.md`, or explicitly tracked as `Device Smoke: PENDING / UNMEASURED`.

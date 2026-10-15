@@ -41,6 +41,16 @@ LOCAL_FAMILY_A = "local_family_a"
 LOCAL_FAMILY_B = "local_family_b"
 LEGAL_LOCAL_FAMILIES = frozenset({LOCAL_FAMILY_A, LOCAL_FAMILY_B})
 
+# Packet role → Core seat. Seats must exist in agents.lock (optional seats stay out).
+ROLE_TO_SEAT: Dict[str, str] = {
+    "build": "qweny",
+    "g5_review": "moxie",
+    "g4_test": "moxie",  # Core folds Mitnick into moxie (Family B)
+    "scrum_audit": "scrum",
+    "cloud_g3": "linus",
+}
+LEGAL_ROLES = frozenset(ROLE_TO_SEAT.keys())
+
 
 class OmarchyError(Exception):
     """Base exception for deterministic governance and kernel failures."""
@@ -69,6 +79,48 @@ def parse_agents_lock() -> Dict[str, Dict[str, str]]:
     if not seats:
         raise OmarchyError("agents.lock contains no seat rows")
     return seats
+
+
+def resolve_role_binding(packet: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+    """
+    Resolve (role, seat_id, family, model, runtime) from packet role + agents.lock.
+
+    Packets MUST declare role. Optional family/model must match the seat row.
+    """
+    role = packet.get("role")
+    if role not in LEGAL_ROLES:
+        raise OmarchyError(
+            f"Packet '{packet.get('packet_id', '?')}' must set "
+            f'"role" to one of {sorted(LEGAL_ROLES)} (got {role!r}).'
+        )
+    seat_id = ROLE_TO_SEAT[role]
+    seats = parse_agents_lock()
+    if seat_id not in seats:
+        raise OmarchyError(
+            f"Role '{role}' maps to seat '{seat_id}', but that seat is missing "
+            f"from agents.lock. Core seats: linus, qweny, moxie, scrum, parent. "
+            f"Optional rows live in agents.lock.optional."
+        )
+    row = seats[seat_id]
+    family = row["family"]
+    model = row["model"]
+    runtime = row["runtime"]
+
+    claimed_family = packet.get("family")
+    if claimed_family is not None and claimed_family != family:
+        raise OmarchyError(
+            f"Packet '{packet.get('packet_id')}' role '{role}' → seat '{seat_id}' "
+            f"binds family '{family}' in agents.lock, but packet claims "
+            f"'{claimed_family}'."
+        )
+    claimed_model = packet.get("model")
+    if claimed_model is not None and claimed_model != model:
+        raise OmarchyError(
+            f"Packet '{packet.get('packet_id')}' claims model '{claimed_model}' for "
+            f"role '{role}' / seat '{seat_id}', but agents.lock binds '{model}'. "
+            "Packets cannot invent or downsize models — edit agents.lock."
+        )
+    return role, seat_id, family, model, runtime
 
 
 def locked_local_family_models() -> Dict[str, str]:
@@ -116,19 +168,34 @@ def locked_local_family_models() -> Dict[str, str]:
 
 def resolve_packet_model(packet: Dict[str, Any]) -> Tuple[str, str]:
     """
-    Resolve (family_id, exact_model) from agents.lock.
+    Resolve (family_id, exact_model) via role → seat → agents.lock.
 
-    Packets MUST declare family=local_family_a|local_family_b.
-    They must NOT invent model slugs. Optional \"model\" is accepted only when
-    it exactly matches the locked slug for that family.
+    Preferred path: packet declares role (and optional family matching the seat).
+    Legacy path: family-only packets still resolve against locked local families.
     """
+    if packet.get("role") is not None:
+        _role, _seat, family, model, runtime = resolve_role_binding(packet)
+        if runtime == "local" and family not in LEGAL_LOCAL_FAMILIES:
+            raise OmarchyError(
+                f"Seat '{_seat}' has illegal local family '{family}'."
+            )
+        if runtime == "local":
+            locked = locked_local_family_models()
+            if locked[family] != model:
+                raise OmarchyError(
+                    f"agents.lock seat '{_seat}' model '{model}' disagrees with "
+                    f"family '{family}' locked model '{locked[family]}'."
+                )
+        return family, model
+
     locked = locked_local_family_models()
     family = packet.get("family")
     if family not in LEGAL_LOCAL_FAMILIES:
         raise OmarchyError(
             f"Packet '{packet.get('packet_id', '?')}' must set "
+            f'"role" ({sorted(LEGAL_ROLES)}) or '
             f'"family": "{LOCAL_FAMILY_A}" | "{LOCAL_FAMILY_B}" '
-            f"(got {family!r}). Models are read ONLY from agents.lock."
+            f"(got family={family!r}). Models are read ONLY from agents.lock."
         )
     locked_model = locked[family]
     claimed = packet.get("model")
@@ -184,7 +251,7 @@ def load_packet(packet_path_str: str) -> Dict[str, Any]:
         "packet_id",
         "story_id",
         "uc_ids",
-        "family",  # local_family_a | local_family_b — model comes from agents.lock
+        "role",  # build | g5_review | g4_test | scrum_audit | cloud_g3
         "base_branch",
         "target_files",
         "instructions",
@@ -207,10 +274,19 @@ def load_packet(packet_path_str: str) -> Dict[str, Any]:
             f"Gate G2: packet touches {len(packet['target_files'])} files (max 5)."
         )
 
-    # SSOT: overwrite/set model from agents.lock — packets never choose models.
-    family, model = resolve_packet_model(packet)
+    # SSOT: role → seat → family/model from agents.lock — packets never choose models.
+    role, seat_id, family, model, runtime = resolve_role_binding(packet)
+    if runtime == "local":
+        locked = locked_local_family_models()
+        if family not in locked or locked[family] != model:
+            raise OmarchyError(
+                f"Seat '{seat_id}' family/model disagrees with locked local families."
+            )
+    packet["role"] = role
+    packet["seat_id"] = seat_id
     packet["family"] = family
     packet["model"] = model
+    packet["runtime"] = runtime
     packet["_packet_path"] = str(packet_path)
     return packet
 
@@ -669,10 +745,12 @@ def execute_packet(
         for rel_path in packet["target_files"]:
             sterilize_path(REPO_ROOT / rel_path, REPO_ROOT)
         prompt_sha = hashlib.sha256(
-            f"DRY_RUN|{packet['packet_id']}|{packet['family']}|{packet['model']}".encode()
+            f"DRY_RUN|{packet['packet_id']}|{packet['role']}|{packet['seat_id']}|"
+            f"{packet['family']}|{packet['model']}".encode()
         ).hexdigest()
         print(
             f"[OMARCHY][DRY-RUN] packet={packet['packet_id']} "
+            f"role={packet['role']} seat={packet['seat_id']} "
             f"family={packet['family']} model={packet['model']} "
             f"contracts={list(contracts.keys())} (worktree-free)"
         )
@@ -682,6 +760,8 @@ def execute_packet(
                 "packet_id": packet["packet_id"],
                 "story_id": packet["story_id"],
                 "uc_ids": ",".join(packet["uc_ids"]),
+                "role": packet["role"],
+                "seat_id": packet["seat_id"],
                 "family": packet["family"],
                 "model": packet["model"],
                 "model_source": "agents.lock",
@@ -693,6 +773,15 @@ def execute_packet(
             }
         )
         return 0
+
+    # Live local Ollama path only — cloud_g3 / host seats are not 2PC workers.
+    if packet.get("runtime") != "local":
+        raise OmarchyError(
+            f"Packet '{packet['packet_id']}' role '{packet['role']}' resolves to "
+            f"runtime '{packet.get('runtime')}' (seat '{packet['seat_id']}'). "
+            "Local 2PC/Ollama accepts only local_council seats. "
+            "Use --dry-run to validate cloud_g3 packets, or dispatch via cloud Tasks."
+        )
 
     # Live path: budget → worktree 2PC → Ollama → gates → commit.
     enforce_memory_budget(packet["model"], num_ctx)
@@ -720,6 +809,8 @@ def execute_packet(
             "packet_id": packet["packet_id"],
             "story_id": packet["story_id"],
             "uc_ids": ",".join(packet["uc_ids"]),
+            "role": packet["role"],
+            "seat_id": packet["seat_id"],
             "family": packet["family"],
             "model": packet["model"],
             "model_source": "agents.lock",

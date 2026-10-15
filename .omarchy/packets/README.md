@@ -1,7 +1,16 @@
 # Sterilized Governance Packets
 
-Packets declare **`family`** only (`local_family_a` | `local_family_b`).
-The exact Ollama model slug is read from [`agents.lock`](../../agents.lock) — never from the packet.
+Packets declare a required **`role`** (`build` | `g5_review` | `g4_test` | `scrum_audit` | `cloud_g3`).
+The kernel maps `role` → seat → `family` / model via [`agents.lock`](../../agents.lock).
+Optional `"family"` must match the seat row; packets never invent model slugs.
+
+| Role | Seat | Family |
+|---|---|---|
+| `build` | `qweny` | `local_family_a` |
+| `g5_review` | `moxie` | `local_family_b` |
+| `g4_test` | `moxie` | `local_family_b` |
+| `scrum_audit` | `scrum` | `local_family_a` |
+| `cloud_g3` | `linus` | cloud (dry-run only on local kernel) |
 
 ```bash
 scripts/run_local_agent.sh --batch --dry-run

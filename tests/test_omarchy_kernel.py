@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -41,9 +42,16 @@ def _pkt(
 def test_locked_local_family_models_exactly_two():
     assert set(LOCKED.keys()) == {FAM_A, FAM_B}
     assert LOCKED[FAM_A] != LOCKED[FAM_B]
-    # Must match agents.lock seats (qweny/jobs/scrum vs moxie/mitnick).
+    # Core-5: qweny/scrum → Family A; moxie → Family B.
     assert LOCKED[FAM_A] == "qwen3.8:27b-mlx"
     assert LOCKED[FAM_B] == "gemma4:31b-mlx"
+
+
+def test_core_seats_present_optional_absent():
+    seats = omarchy.parse_agents_lock()
+    assert set(seats) == {"linus", "qweny", "moxie", "scrum", "parent"}
+    for optional in ("dhh", "carmack", "knuth", "mitnick", "jobs"):
+        assert optional not in seats
 
 
 def test_sterilize_path_blocks_traversal():
@@ -97,6 +105,7 @@ def test_resolve_packet_model_rejects_invented_slug():
         omarchy.resolve_packet_model(
             {
                 "packet_id": "evil",
+                "role": "build",
                 "family": FAM_A,
                 "model": "qwen2.5-coder:32b",
             }
@@ -108,6 +117,7 @@ def test_resolve_packet_model_rejects_size_downsize():
         omarchy.resolve_packet_model(
             {
                 "packet_id": "evil-size",
+                "role": "build",
                 "family": FAM_A,
                 "model": "qwen3.8:14b-mlx",
             }
@@ -118,9 +128,111 @@ def test_resolve_packet_model_accepts_lock_match():
     family, model = omarchy.resolve_packet_model(
         {
             "packet_id": "ok",
+            "role": "build",
             "family": FAM_A,
             "model": LOCKED[FAM_A],
         }
     )
     assert family == FAM_A
     assert model == LOCKED[FAM_A]
+
+
+def test_role_build_maps_to_qweny_family_a():
+    role, seat, family, model, runtime = omarchy.resolve_role_binding(
+        {"packet_id": "r1", "role": "build"}
+    )
+    assert (role, seat, family, model, runtime) == (
+        "build",
+        "qweny",
+        FAM_A,
+        LOCKED[FAM_A],
+        "local",
+    )
+
+
+def test_role_g5_and_g4_map_to_moxie_family_b():
+    for role_name in ("g5_review", "g4_test"):
+        role, seat, family, model, runtime = omarchy.resolve_role_binding(
+            {"packet_id": role_name, "role": role_name}
+        )
+        assert role == role_name
+        assert seat == "moxie"
+        assert family == FAM_B
+        assert model == LOCKED[FAM_B]
+        assert runtime == "local"
+
+
+def test_role_scrum_audit_maps_to_scrum():
+    role, seat, family, model, runtime = omarchy.resolve_role_binding(
+        {"packet_id": "s1", "role": "scrum_audit"}
+    )
+    assert (role, seat, family, runtime) == ("scrum_audit", "scrum", FAM_A, "local")
+    assert model == LOCKED[FAM_A]
+
+
+def test_role_cloud_g3_maps_to_linus():
+    role, seat, family, model, runtime = omarchy.resolve_role_binding(
+        {"packet_id": "c1", "role": "cloud_g3"}
+    )
+    assert role == "cloud_g3"
+    assert seat == "linus"
+    assert runtime == "cloud"
+    assert family == "anthropic_opus"
+    assert model == "claude-opus-5-5-high"
+
+
+def test_unknown_role_rejected():
+    with pytest.raises(omarchy.OmarchyError, match="role"):
+        omarchy.resolve_role_binding({"packet_id": "bad", "role": "ninja"})
+
+
+def test_role_family_mismatch_rejected():
+    with pytest.raises(omarchy.OmarchyError, match="family"):
+        omarchy.resolve_role_binding(
+            {
+                "packet_id": "mismatch",
+                "role": "build",
+                "family": FAM_B,
+            }
+        )
+
+
+def test_missing_core_seat_rejected():
+    thin_lock = {
+        "linus": {
+            "seat_id": "linus",
+            "group": "grand_council",
+            "runtime": "cloud",
+            "family": "anthropic_opus",
+            "model": "claude-opus-5-5-high",
+            "weight": "G3",
+        },
+        # qweny intentionally missing
+        "moxie": {
+            "seat_id": "moxie",
+            "group": "local_council",
+            "runtime": "local",
+            "family": FAM_B,
+            "model": LOCKED[FAM_B],
+            "weight": "G5",
+        },
+        "scrum": {
+            "seat_id": "scrum",
+            "group": "local_council",
+            "runtime": "local",
+            "family": FAM_A,
+            "model": LOCKED[FAM_A],
+            "weight": "scrum",
+        },
+        "parent": {
+            "seat_id": "parent",
+            "group": "orchestrator",
+            "runtime": "host",
+            "family": "orchestrator",
+            "model": "host_session",
+            "weight": "router",
+        },
+    }
+    with mock.patch.object(omarchy, "parse_agents_lock", return_value=thin_lock):
+        with pytest.raises(omarchy.OmarchyError, match="missing from agents.lock"):
+            omarchy.resolve_role_binding({"packet_id": "no-builder", "role": "build"})

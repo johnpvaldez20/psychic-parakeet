@@ -10,15 +10,16 @@
 
 1. **Law 1 — Plan Before Code:** No production code is written unless it implements an active Story/Task in `docs/SPRINT_DASHBOARD.md` backed by `00_ARCHITECTURE.md` and `docs/PRODUCT_SPEC.md`.
 2. **Law 2 — Strict Hemisphere Separation:**
-   - **Cloud Grand Council (`linus`, `dhh`, `carmack`, `knuth`):** Authors plans, product specs, Rule 11 task packets, and `G3`/`G4` structural reviews. **Never** writes production code, unit tests, or build scripts.
-   - **Local Council (`qweny`, `moxie`, `mitnick`, `jobs`, `scrum`):** Executes all coding, unit/functional testing, `G5` peer review, UX briefs, and Scrum audits via local Ollama (`scripts/run_local_agent.sh`). **Never** edits architecture or product specs (emit `NEEDS_PLAN: <reason>` and halt).
+   - **Cloud Grand Council (Core: `linus`; optional: `dhh`, `carmack`, `knuth`):** Authors plans, product specs, Rule 11 task packets, and `G3`/`G4` structural reviews. **Never** writes production code, unit tests, or build scripts.
+   - **Local Council (Core: `qweny`, `moxie`, `scrum`; optional: `mitnick`, `jobs`):** Executes all coding, unit/functional testing, `G5` peer review, adversarial `g4_test` (default: `moxie`), and Scrum audits via local Ollama (`scripts/run_local_agent.sh <packet.json>`). **Never** edits architecture or product specs (emit `NEEDS_PLAN: <reason>` and halt).
 3. **Law 3 — Self-Contained Rule 11 Context Packets:** Local models have zero repository telepathy. Every local prompt packet must inline:
    - Target file paths to create or modify,
    - Exact quoted signatures of neighbour classes/functions to call,
    - The `Given / When / Then` acceptance criteria and contract invariants from `00_ARCHITECTURE.md`,
-   - Required unit and negative test cases.
+   - Required unit and negative test cases,
+   - A required packet `role` (`build` / `g5_review` / `g4_test` / `scrum_audit` / `cloud_g3`) resolved through `agents.lock`.
 4. **Law 4 — `UNKNOWN` Over Invention:** If any symbol, API, shape, or requirement is missing from the prompt packet, output `UNKNOWN — NEEDS_PLAN: <missing item>` and stop immediately. Never guess imports, framework APIs, or magic constants.
-5. **Law 5 — Cross-Family Double-Check (`G5`):** Every code or test artifact authored by Local Model Family A (`qweny`) **must** be reviewed by Local Model Family B (`moxie` / `mitnick`), and vice versa. Reviewer model family $\neq$ Author model family, even at $2\times$ token cost.
+5. **Law 5 — Cross-Family Double-Check (`G5`):** Every code or test artifact authored by Local Model Family A (`qweny`) **must** be reviewed by Local Model Family B (`moxie`), and vice versa. Reviewer model family $\neq$ Author model family, even at $2\times$ token cost.
 6. **Law 6 — Cryptographic Proof of Execution (`G0`):** The sterilized 2PC kernel [`.omarchy/omarchy.py`](.omarchy/omarchy.py) (invoked only via `scripts/run_local_agent.sh <packet.json>`) records `packet_sha256`, `prompt_sha256`, `tree_sha256` (sha256 of staged worktree diff), `packet_id`, and `trailer_status` in `.omarchy/local-agent-proof.log` using `fcntl.flock(LOCK_EX)`. Packets must live under `.omarchy/packets/`; Story/UC contracts under `.omarchy/contracts/`. Ollama calls use serialized load/run/unload (`keep_alive: 0` on family boundaries). Ad-hoc prose and unparsed stdout dumps are forbidden. A local Cursor subagent on the parent's cloud model is **never** local proof.
 7. **Law 7 — Mechanical Reproduction (`G1`):** Any agent claim that "tests pass" or "coverage increased" is **void** until the Orchestrator (`parent`) runs the automated Testing Jig in a clean working tree.
 8. **Law 8 — Zero Silent Dependencies (`G2`):** No agent may add a library, plugin, or native dependency without a Cloud Grand Council vote and explicit human approval.
@@ -37,7 +38,7 @@
 | **`G1` Mechanical Jig** | `parent` (Testing Jig) | Build, lint, and full unit suite pass (`0` failures, `0` errors); `docs/TESTING_JIG_REPORT.md` updated. |
 | **`G2` Symbol & Dep Hygiene** | `parent` | All imports/symbols resolve; zero unapproved dependencies (`Law 8`); diff within slice budget ($\le 300$ LOC / $\le 5$ files). |
 | **`G3` Structural Architecture** | Cloud `linus` | Independent cloud review of diff vs. `00_ARCHITECTURE.md` boundaries. Must emit `OMARCHY_VERDICT: APPROVE`. |
-| **`G4` Specialist Audit** | Cloud `carmack` / `dhh` + Local `mitnick` | `carmack` on hot-path/math/ML; `dhh` on UI/UX; `mitnick` on fail-closed negative tests. (Invoked for touched domains). |
+| **`G4` Specialist Audit** | Cloud optional `carmack` / `dhh` + Local `moxie` (`g4_test`) | Optional cloud specialists on hot-path/UI; Core local `moxie` owns fail-closed negative tests (`g4_test` role). |
 | **`G5` Cross-Family Peer** | Local `moxie` (or `qweny` on `mitnick` tests) | Standing local second-read on the **opposite local model family** from the author. Must emit `OMARCHY_VERDICT: APPROVE`. |
 
 ---

@@ -1,0 +1,12 @@
+# Omarchy Scrum 2.3 — Optional seats (NOT loaded by the kernel)
+# Copy a row into agents.lock only when the project enables that pack.
+# Format: SEAT_ID|GROUP|RUNTIME|FAMILY|DEFAULT_MODEL|WEIGHT
+#
+# Cloud Grand Council pack (beyond Core linus):
+dhh|grand_council|cloud|muse_spark|muse-spark-1.3-high|Product, UI & Jobs-level visual taste (G4-UI)
+carmack|grand_council|cloud|xai_grok|grok-4.7-high|Performance, engine math & ABI honesty (G4-Perf)
+knuth|grand_council|cloud|openai_gpt|gpt-5.6-sol-high|Algorithmic rigor, invariants & developer onboarding
+#
+# Local add-ons (Core folds g4_test into moxie; jobs is UX-only):
+mitnick|local_council|local|local_family_b|gemma4:31b-mlx|Dedicated adversarial QA seat (optional split from moxie)
+jobs|local_council|local|local_family_a|qwen3.8:27b-mlx|Sighted UX taste & friction auditor (Non-G5)
