@@ -2,6 +2,7 @@
 
 Independent Nobel ballots (one run per seat, distinct model families per [`agents.lock`](../agents.lock)) are archived under `docs/GRAND_COUNCIL/<milestone-date>/`.
 
-| Date | Milestone | Linus (`G3`) | DHH (`G4-UI`) | Carmack (`G4-Perf`) | Knuth (Rigor) | Local Council (`qweny`/`moxie`/`mitnick`/`scrum`) | Outcome |
+| Date | Milestone | Linus (`G3`) | DHH (`G4-UI`) | Carmack (`G4-Perf`) | Knuth (Rigor) | Local Council (`qweny`/`moxie`/`scrum`) | Outcome |
 |---|---|---|---|---|---|---|---|
 | 2026-10-14 | Day-0 Bootstrap | Ready | Ready | Ready | Ready | Ready | Initialized |
+| 2026-10-15 | **v2.3.1_Test** live Core-5 audit | `REQUEST_CHANGES` (3) · [bc-91e81599](https://github.com/johnpvaldez20/psychic-parakeet/pull/1) | optional (not in Core lock) | optional | optional | qweny worksheet COMPLETE; moxie G4/G5 `REQUEST_CHANGES`; scrum DoD `REQUEST_CHANGES` · [FLOW_TRACE](GRAND_COUNCIL/v2.3.1_Test/FLOW_TRACE.md) | Live A→B→A 2PC COMMITTED; see `docs/GRAND_COUNCIL/v2.3.1_Test/` |

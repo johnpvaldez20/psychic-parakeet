@@ -12,3 +12,4 @@
 | 2026-10-14 | Kernel unit tests | Added `tests/test_omarchy_kernel.py` — causal A→B→A waves, file-lock coalesce block, deadlock, path sterilize, and lock-slug rejection — all fixtures bound to `agents.lock` families only. |
 | 2026-10-14 | **v2.2.1** | Tagged lock SSOT, 105GB pre-load budget guard, worktree-free `--dry-run`, and lock-bound kernel unit tests. |
 | 2026-10-14 | **v2.3 Lean Core-5** | Default `agents.lock` trimmed to `linus` / `qweny` / `moxie` / `scrum` / `parent`; optional seats in `agents.lock.optional`. Packets require `role` → seat → family/model; `g4_test` folded into `moxie`. |
+| 2026-10-15 | **v2.3.1_Test** live audit drill | Cloud `linus` plan/ballot → parent packets → live Ollama 2PC `build`/`g4_test`/`g5_review`/`scrum_audit` into `docs/GRAND_COUNCIL/v2.3.1_Test/`; all four local packets `COMMITTED`. MLX fixes: drop `format=json`, strip markdown fences. Trace: `FLOW_TRACE.md`. |
