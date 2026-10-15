@@ -3,13 +3,13 @@
   "story_id": "STORY-BATCH",
   "uc_ids": ["UC-BATCH-A", "UC-BATCH-B"],
   "depends_on": ["pkt-02-audit"],
-  "model": "qwen2.5-coder:32b",
+  "family": "local_family_a",
   "num_ctx": 16384,
   "base_branch": "main",
   "target_files": [
     "src/demo/core_module.py"
   ],
-  "instructions": "Refactor src/demo/core_module.py based on the audit test suite from pkt-02-audit (reload Family A after Family B eviction).",
+  "instructions": "Refactor src/demo/core_module.py based on the audit suite from pkt-02-audit. Reloads Family A from agents.lock after Family B eviction.",
   "verification_commands": [
     ["python3", "-m", "py_compile", "src/demo/core_module.py"]
   ]

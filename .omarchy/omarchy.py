@@ -21,10 +21,11 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+LOCK_FILE = REPO_ROOT / "agents.lock"
 OMARCHY_ROOT = REPO_ROOT / ".omarchy"
 CONTRACTS_DIR = OMARCHY_ROOT / "contracts"
 WORKTREES_DIR = OMARCHY_ROOT / "worktrees"
@@ -34,9 +35,110 @@ PROOF_LOG = Path(
 )
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://127.0.0.1:11434").rstrip("/")
 
+# Exactly two local families. Each binds ONE exact model slug in agents.lock.
+# Never coalesce parameter sizes (:27b vs :14b) — the lock slug is the identity.
+LOCAL_FAMILY_A = "local_family_a"
+LOCAL_FAMILY_B = "local_family_b"
+LEGAL_LOCAL_FAMILIES = frozenset({LOCAL_FAMILY_A, LOCAL_FAMILY_B})
+
 
 class OmarchyError(Exception):
     """Base exception for deterministic governance and kernel failures."""
+
+
+def parse_agents_lock() -> Dict[str, Dict[str, str]]:
+    """Read agents.lock — the sole SSOT for every model slug in this repo."""
+    if not LOCK_FILE.exists():
+        raise OmarchyError(f"Missing agents.lock at {LOCK_FILE}")
+    seats: Dict[str, Dict[str, str]] = {}
+    for line in LOCK_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 6:
+            continue
+        seats[parts[0]] = {
+            "seat_id": parts[0],
+            "group": parts[1],
+            "runtime": parts[2],
+            "family": parts[3],
+            "model": parts[4],
+            "weight": parts[5],
+        }
+    if not seats:
+        raise OmarchyError("agents.lock contains no seat rows")
+    return seats
+
+
+def locked_local_family_models() -> Dict[str, str]:
+    """
+    Project agents.lock → {local_family_a: exact_model, local_family_b: exact_model}.
+
+    Fails closed if a family is missing, or if any family binds more than one
+    distinct model slug (different sizes = different models = illegal).
+    """
+    by_family: Dict[str, Set[str]] = defaultdict(set)
+    for row in parse_agents_lock().values():
+        if row["runtime"] != "local":
+            continue
+        fam = row["family"]
+        if fam not in LEGAL_LOCAL_FAMILIES:
+            raise OmarchyError(
+                f"agents.lock seat '{row['seat_id']}' has illegal local family "
+                f"'{fam}'. Only {sorted(LEGAL_LOCAL_FAMILIES)} are permitted."
+            )
+        by_family[fam].add(row["model"])
+
+    resolved: Dict[str, str] = {}
+    for fam in (LOCAL_FAMILY_A, LOCAL_FAMILY_B):
+        models = by_family.get(fam, set())
+        if not models:
+            raise OmarchyError(
+                f"agents.lock missing local family '{fam}'. "
+                "Family A and Family B must each bind exactly one model."
+            )
+        if len(models) > 1:
+            raise OmarchyError(
+                f"agents.lock family '{fam}' binds multiple models {sorted(models)}. "
+                "Exactly ONE model per family — never mix parameter sizes. "
+                "Edit agents.lock only."
+            )
+        resolved[fam] = next(iter(models))
+
+    if resolved[LOCAL_FAMILY_A] == resolved[LOCAL_FAMILY_B]:
+        raise OmarchyError(
+            "agents.lock Family A and Family B resolve to the same model. "
+            "Two distinct models required; only one may reside in RAM at a time."
+        )
+    return resolved
+
+
+def resolve_packet_model(packet: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Resolve (family_id, exact_model) from agents.lock.
+
+    Packets MUST declare family=local_family_a|local_family_b.
+    They must NOT invent model slugs. Optional \"model\" is accepted only when
+    it exactly matches the locked slug for that family.
+    """
+    locked = locked_local_family_models()
+    family = packet.get("family")
+    if family not in LEGAL_LOCAL_FAMILIES:
+        raise OmarchyError(
+            f"Packet '{packet.get('packet_id', '?')}' must set "
+            f'"family": "{LOCAL_FAMILY_A}" | "{LOCAL_FAMILY_B}" '
+            f"(got {family!r}). Models are read ONLY from agents.lock."
+        )
+    locked_model = locked[family]
+    claimed = packet.get("model")
+    if claimed is not None and claimed != locked_model:
+        raise OmarchyError(
+            f"Packet '{packet.get('packet_id')}' claims model '{claimed}' for "
+            f"family '{family}', but agents.lock binds '{locked_model}'. "
+            "Packets cannot invent or downsize models — edit agents.lock."
+        )
+    return family, locked_model
 
 
 # ============================================================================
@@ -82,7 +184,7 @@ def load_packet(packet_path_str: str) -> Dict[str, Any]:
         "packet_id",
         "story_id",
         "uc_ids",
-        "model",
+        "family",  # local_family_a | local_family_b — model comes from agents.lock
         "base_branch",
         "target_files",
         "instructions",
@@ -105,6 +207,10 @@ def load_packet(packet_path_str: str) -> Dict[str, Any]:
             f"Gate G2: packet touches {len(packet['target_files'])} files (max 5)."
         )
 
+    # SSOT: overwrite/set model from agents.lock — packets never choose models.
+    family, model = resolve_packet_model(packet)
+    packet["family"] = family
+    packet["model"] = model
     packet["_packet_path"] = str(packet_path)
     return packet
 
@@ -356,6 +462,67 @@ def build_agent_prompt(
     )
 
 
+# ~105GB ceiling on a 128GB box (weights + KV + test runner); leave ~23GB for OS/page cache.
+MAX_FAMILY_BUDGET_BYTES = int(os.environ.get("OMARCHY_MAX_RAM_BYTES", 105 * (1024**3)))
+# Conservative ~0.5MB/token KV+compute buffer for large local models.
+BYTES_PER_CTX_TOKEN_ESTIMATE = 512 * 1024
+
+
+def enforce_memory_budget(model: str, num_ctx: int) -> None:
+    """
+    Pre-load guard: model weights (Ollama /api/tags size) + KV/ctx estimate + 4GB
+    test-runner headroom must stay within the ~105GB family ceiling.
+    """
+    if num_ctx < 1:
+        raise OmarchyError(f"num_ctx must be >= 1 (got {num_ctx})")
+
+    req = urllib.request.Request(
+        url=f"{OLLAMA_API_URL}/api/tags",
+        headers={"Content-Type": "application/json"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            tags_data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise OmarchyError(
+            f"Cannot query Ollama /api/tags for memory budget check: {exc}"
+        ) from exc
+
+    weight_bytes = 0
+    for m in tags_data.get("models", []):
+        name = m.get("name") or m.get("model") or ""
+        # Exact match, or Ollama's name:tag / name:latest aliases for the locked slug.
+        if name == model or name.startswith(f"{model}:") or model.startswith(f"{name}:"):
+            weight_bytes = int(m.get("size", 0) or 0)
+            if weight_bytes > 0:
+                break
+
+    if weight_bytes == 0:
+        raise OmarchyError(
+            f"Model '{model}' is not pulled locally in Ollama; refusing unbudgeted load."
+        )
+
+    kv_and_runner_bytes = (num_ctx * BYTES_PER_CTX_TOKEN_ESTIMATE) + (4 * (1024**3))
+    estimated_total = weight_bytes + kv_and_runner_bytes
+
+    print(
+        f"[OMARCHY][BUDGET] model='{model}' weights={weight_bytes / (1024**3):.1f}GB "
+        f"ctx/runner={kv_and_runner_bytes / (1024**3):.1f}GB "
+        f"total≈{estimated_total / (1024**3):.1f}GB "
+        f"limit={MAX_FAMILY_BUDGET_BYTES / (1024**3):.1f}GB"
+    )
+
+    if estimated_total > MAX_FAMILY_BUDGET_BYTES:
+        raise OmarchyError(
+            f"MEMORY BUDGET EXCEEDED for '{model}': estimated "
+            f"{estimated_total / (1024**3):.1f}GB "
+            f"(weights={weight_bytes / (1024**3):.1f}GB, "
+            f"ctx/runner={kv_and_runner_bytes / (1024**3):.1f}GB) "
+            f"> limit {MAX_FAMILY_BUDGET_BYTES / (1024**3):.1f}GB."
+        )
+
+
 def invoke_ollama_serial(
     model: str,
     prompt: str,
@@ -365,7 +532,15 @@ def invoke_ollama_serial(
     """
     Serialized Ollama /api/generate.
     keep_alive=0 forces immediate eviction after the call (128GB RAM hygiene).
+    Model MUST be one of the two exact slugs from agents.lock.
     """
+    allowed = set(locked_local_family_models().values())
+    if model not in allowed:
+        raise OmarchyError(
+            f"Refusing to load '{model}'. Only agents.lock local models are legal: "
+            f"{sorted(allowed)}"
+        )
+    enforce_memory_budget(model, num_ctx)
     payload = {
         "model": model,
         "prompt": prompt,
@@ -462,9 +637,17 @@ def apply_agent_changes(
 # 4. PACKET EXECUTION + FAMILY QUEUE
 # ============================================================================
 
-def model_family(model: str) -> str:
-    """Coarse family key for keep-warm batching (name before ':' or full slug)."""
-    return model.split(":")[0].strip().lower()
+def wave_key(packet: Dict[str, Any]) -> str:
+    """
+    Wave identity = locked family id (local_family_a | local_family_b).
+
+    Never strip tags or coalesce :27b with :14b — different slugs are different
+    models and agents.lock forbids more than one slug per family.
+    """
+    family = packet.get("family")
+    if family not in LEGAL_LOCAL_FAMILIES:
+        raise OmarchyError(f"Packet missing locked family for wave key: {packet.get('packet_id')}")
+    return family
 
 
 def execute_packet(
@@ -479,37 +662,51 @@ def execute_packet(
         Path(packet["_packet_path"]).read_bytes()
     ).hexdigest()
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    num_ctx = int(packet.get("num_ctx", 16384))
+
+    # --dry-run: no git worktree, no Ollama (CI / shallow clones safe).
+    if dry_run:
+        for rel_path in packet["target_files"]:
+            sterilize_path(REPO_ROOT / rel_path, REPO_ROOT)
+        prompt_sha = hashlib.sha256(
+            f"DRY_RUN|{packet['packet_id']}|{packet['family']}|{packet['model']}".encode()
+        ).hexdigest()
+        print(
+            f"[OMARCHY][DRY-RUN] packet={packet['packet_id']} "
+            f"family={packet['family']} model={packet['model']} "
+            f"contracts={list(contracts.keys())} (worktree-free)"
+        )
+        append_locked_log(
+            {
+                "time": now,
+                "packet_id": packet["packet_id"],
+                "story_id": packet["story_id"],
+                "uc_ids": ",".join(packet["uc_ids"]),
+                "family": packet["family"],
+                "model": packet["model"],
+                "model_source": "agents.lock",
+                "packet_sha256": packet_sha,
+                "prompt_sha256": prompt_sha,
+                "tree_sha256": "",
+                "trailer_status": "DRY_RUN",
+                "keep_warm": str(keep_warm),
+            }
+        )
+        return 0
+
+    # Live path: budget → worktree 2PC → Ollama → gates → commit.
+    enforce_memory_budget(packet["model"], num_ctx)
 
     tx = WorktreeTransaction(packet["packet_id"], packet["base_branch"])
     with tx as wt_path:
         prompt = build_agent_prompt(packet, contracts, wt_path)
         prompt_sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
-        if dry_run:
-            print(
-                f"[OMARCHY][DRY-RUN] Packet '{packet['packet_id']}' and contracts verified."
-            )
-            append_locked_log(
-                {
-                    "time": now,
-                    "packet_id": packet["packet_id"],
-                    "story_id": packet["story_id"],
-                    "uc_ids": ",".join(packet["uc_ids"]),
-                    "model": packet["model"],
-                    "packet_sha256": packet_sha,
-                    "prompt_sha256": prompt_sha,
-                    "tree_sha256": "",
-                    "trailer_status": "DRY_RUN",
-                    "keep_warm": str(keep_warm),
-                }
-            )
-            return 0
-
         updated_files = invoke_ollama_serial(
-            model=packet["model"],
+            model=packet["model"],  # always resolved from agents.lock in load_packet
             prompt=prompt,
             unload_after=not keep_warm,
-            num_ctx=int(packet.get("num_ctx", 16384)),
+            num_ctx=num_ctx,
         )
         apply_agent_changes(wt_path, packet["target_files"], updated_files)
         run_deterministic_gates(wt_path, packet["verification_commands"])
@@ -523,7 +720,9 @@ def execute_packet(
             "packet_id": packet["packet_id"],
             "story_id": packet["story_id"],
             "uc_ids": ",".join(packet["uc_ids"]),
+            "family": packet["family"],
             "model": packet["model"],
+            "model_source": "agents.lock",
             "packet_sha256": packet_sha,
             "prompt_sha256": prompt_sha,
             "tree_sha256": tree_sha,

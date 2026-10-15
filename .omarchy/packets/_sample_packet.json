@@ -5,14 +5,14 @@
     "UC-101-A",
     "UC-101-B"
   ],
-  "model": "qwen3.8:27b-mlx",
+  "family": "local_family_a",
   "num_ctx": 16384,
   "base_branch": "main",
   "target_files": [
     "src/ledger/transaction.py",
     "tests/test_transaction.py"
   ],
-  "instructions": "Implement idempotent two-phase commit validation in src/ledger/transaction.py satisfying STORY-101 and UC-101-A/B, and add unit tests in tests/test_transaction.py.",
+  "instructions": "Implement idempotent two-phase commit validation in src/ledger/transaction.py satisfying STORY-101 and UC-101-A/B, and add unit tests in tests/test_transaction.py. Model is resolved from agents.lock Family A only.",
   "verification_commands": [
     ["python3", "-m", "py_compile", "src/ledger/transaction.py"],
     ["python3", "-m", "py_compile", "tests/test_transaction.py"]

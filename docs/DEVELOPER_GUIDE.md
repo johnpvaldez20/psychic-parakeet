@@ -11,6 +11,13 @@
 2. Read [`00_ARCHITECTURE.md`](../00_ARCHITECTURE.md) for module boundaries, threading rules, and mathematical/ABI contracts.
 3. Read [`docs/PRODUCT_SPEC.md`](PRODUCT_SPEC.md) for user-facing requirements (`UC-01..UC-XX`).
 4. Check [`docs/SPRINT_DASHBOARD.md`](SPRINT_DASHBOARD.md) §0 for the current Sprint checkpoint and active stories.
+5. Kernel unit tests (lock-bound wave planner / path sterilize / `agents.lock` SSOT):
+
+```bash
+python3 -m venv .venv          # once
+.venv/bin/pip install pytest   # once
+.venv/bin/python -m pytest tests/test_omarchy_kernel.py -q
+```
 
 ---
 

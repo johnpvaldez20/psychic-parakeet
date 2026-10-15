@@ -3,13 +3,13 @@
   "story_id": "STORY-BATCH",
   "uc_ids": ["UC-BATCH-B"],
   "depends_on": ["pkt-01-impl"],
-  "model": "deepseek-r1:70b",
+  "family": "local_family_b",
   "num_ctx": 16384,
   "base_branch": "main",
   "target_files": [
     "tests/demo/test_core_module.py"
   ],
-  "instructions": "Audit edge cases for src/demo/core_module.py and expand tests in tests/demo/test_core_module.py (STORY-BATCH / UC-BATCH-B).",
+  "instructions": "Audit edge cases for src/demo/core_module.py and expand tests in tests/demo/test_core_module.py. Model is resolved from agents.lock Family B only.",
   "verification_commands": [
     ["python3", "-m", "py_compile", "tests/demo/test_core_module.py"]
   ]

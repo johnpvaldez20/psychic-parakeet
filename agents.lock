@@ -1,6 +1,13 @@
-# Omarchy Scrum 2.0 — Seat-to-Model Lock (Single Source of Truth)
+# Omarchy Scrum 2.0 — Seat-to-Model Lock (SINGLE SOURCE OF TRUTH)
 # Format: SEAT_ID|GROUP|RUNTIME|FAMILY|DEFAULT_MODEL|WEIGHT
-# Edit model versions ONLY here after a 1-task A/B cook-off.
+#
+# LOCAL RULE (enforced by .omarchy/omarchy.py):
+#   - local_family_a → exactly ONE model slug (Family A)
+#   - local_family_b → exactly ONE model slug (Family B)
+#   - Only one of these two models may reside in RAM at a time
+#   - Packets declare "family" only — they NEVER invent model strings
+#   - Different parameter sizes are different models; never coalesce
+# Edit model versions ONLY here after evidence lands in docs/EVIDENCE.md.
 schema=2
 
 linus|grand_council|cloud|anthropic_opus|claude-opus-5-5-high|Chief Architect (G3), system boundaries, diff size

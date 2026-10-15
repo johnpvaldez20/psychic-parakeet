@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -33,8 +34,14 @@ from omarchy import (  # noqa: E402
     OmarchyError,
     execute_packet,
     load_packet,
+    locked_local_family_models,
     sterilize_path,
+    verify_story_and_uc,
+    wave_key,
 )
+
+REPO_ROOT = OMARCHY_ROOT.parent
+
 
 STATE_DIR = OMARCHY_ROOT / "state"
 COMPLETED_LOG = STATE_DIR / "completed_packets.json"
@@ -149,11 +156,13 @@ def plan_serial_family_waves(
                 f"Deadlock or unsatisfied 'depends_on' cycle in packet queue: {unresolved}"
             )
 
+        # Wave key = locked family id (local_family_a | local_family_b).
+        # Exact agents.lock model slug only — never coalesce by name prefix / size.
         if not coalesce_families:
-            first_model = ready[0]["model"]
+            first_key = wave_key(ready[0])
             contiguous_batch: List[Dict[str, Any]] = []
             for pkt in ready:
-                if pkt["model"] == first_model:
+                if wave_key(pkt) == first_key:
                     contiguous_batch.append(pkt)
                 else:
                     break
@@ -165,10 +174,10 @@ def plan_serial_family_waves(
             family_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
             family_order: List[str] = []
             for pkt in ready:
-                model = pkt["model"]
-                if model not in family_groups:
-                    family_order.append(model)
-                family_groups[model].append(pkt)
+                key = wave_key(pkt)
+                if key not in family_groups:
+                    family_order.append(key)
+                family_groups[key].append(pkt)
 
             chosen_family = family_order[0]
             batch = family_groups[chosen_family]
@@ -188,25 +197,36 @@ def execute_single_packet(
     """
     Runs a single packet via the sterilized 2PC kernel.
 
-    keep_warm = not unload_after so intermediate same-family packets leave the
-    model resident; the wave `finally` still calls evict_model even if a gate
-    aborts while keep_warm was true on a prior packet.
+    --dry-run short-circuits BEFORE WorktreeTransaction so CI / shallow clones
+    do not need a local base_branch worktree checkout.
     """
     path = packet.get("_path") or packet.get("_packet_path")
     if not path:
         raise OmarchyError(f"Packet '{packet.get('packet_id')}' missing path metadata.")
 
+    # Short-circuit dry-run: contracts + path sterilize only (no git, no Ollama).
+    if dry_run:
+        contracts = verify_story_and_uc(packet["story_id"], packet["uc_ids"])
+        for rel_path in packet["target_files"]:
+            # Containment check only — file need not exist yet (new targets OK).
+            sterilize_path(REPO_ROOT / rel_path, REPO_ROOT)
+        print(
+            f"  [DRY-RUN] packet={packet['packet_id']} "
+            f"family={packet['family']} model={packet['model']} "
+            f"unload_after={unload_after} contracts={list(contracts.keys())}"
+        )
+        return
+
     rc = execute_packet(
         str(path),
-        dry_run=dry_run,
+        dry_run=False,
         keep_warm=not unload_after,
     )
     if rc != 0:
         raise OmarchyError(
             f"Packet '{packet['packet_id']}' failed 2PC execution (exit {rc})."
         )
-    if not dry_run:
-        record_completed_id(packet["packet_id"])
+    record_completed_id(packet["packet_id"])
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -243,6 +263,13 @@ def run_batch(
     strict_fifo: bool = False,
     dry_run: bool = False,
 ) -> int:
+    # Fail closed up front if agents.lock is inconsistent (must be exactly 2 local models).
+    locked = locked_local_family_models()
+    print(
+        "[OMARCHY][LOCK] agents.lock local models: "
+        + ", ".join(f"{fam}={slug}" for fam, slug in locked.items())
+    )
+
     completed = load_completed_ids()
     pending = discover_pending_packets(packet_paths or [], completed)
     if not pending:
@@ -260,16 +287,21 @@ def run_batch(
         f"across {len(pending)} packet(s):"
     )
     for idx, wave in enumerate(waves, start=1):
-        model_name = wave[0]["model"]
+        fam = wave[0]["family"]
+        model_name = wave[0]["model"]  # always from agents.lock via load_packet
         pids = [p["packet_id"] for p in wave]
         print(
-            f"  Wave {idx}: model='{model_name}' -> packets={pids} "
+            f"  Wave {idx}: family='{fam}' model='{model_name}' -> packets={pids} "
             f"(evict after '{pids[-1]}')"
         )
 
     for idx, wave in enumerate(waves, start=1):
+        fam = wave[0]["family"]
         model_name = wave[0]["model"]
-        print(f"\n[OMARCHY][WAVE {idx}/{len(waves)}] === Loading Family '{model_name}' ===")
+        print(
+            f"\n[OMARCHY][WAVE {idx}/{len(waves)}] === Loading {fam} "
+            f"(model='{model_name}' from agents.lock) ==="
+        )
         try:
             for pkt_idx, pkt in enumerate(wave):
                 is_last_in_wave = pkt_idx == (len(wave) - 1)
@@ -283,6 +315,7 @@ def run_batch(
             # even if a packet aborted mid-wave while a prior packet used keep-warm.
             if not dry_run:
                 evict_model(model_name)
+
 
     if dry_run:
         print("\n[OMARCHY][BATCH-SUCCESS] Dry-run: all waves planned and contracts verified.")
@@ -302,6 +335,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except OmarchyError as exc:
         print(f"[OMARCHY][BATCH-FATAL] {exc}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"[OMARCHY][GIT-ERROR] Command {exc.cmd} failed:\n{exc.stderr or exc.stdout}",
+            file=sys.stderr,
+        )
+        return 2
 
 
 if __name__ == "__main__":

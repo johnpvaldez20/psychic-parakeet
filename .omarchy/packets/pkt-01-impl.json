@@ -3,13 +3,13 @@
   "story_id": "STORY-BATCH",
   "uc_ids": ["UC-BATCH-A"],
   "depends_on": [],
-  "model": "qwen2.5-coder:32b",
+  "family": "local_family_a",
   "num_ctx": 16384,
   "base_branch": "main",
   "target_files": [
     "src/demo/core_module.py"
   ],
-  "instructions": "Implement src/demo/core_module.py as a minimal idempotent helper module satisfying STORY-BATCH / UC-BATCH-A.",
+  "instructions": "Implement src/demo/core_module.py as a minimal idempotent helper module satisfying STORY-BATCH / UC-BATCH-A. Model is resolved from agents.lock Family A only.",
   "verification_commands": [
     ["python3", "-m", "py_compile", "src/demo/core_module.py"]
   ]
