@@ -1,4 +1,12 @@
-.angie/model-cache/
+.omarchy/model-cache/
+.omarchy/worktrees/
+.omarchy/state/
+.omarchy/local-agent-proof.log
+.omarchy/cloud-agent-ledger.log
+.omarchy/token-split-latest.txt
+.omarchy/env.log
+__pycache__/
+.omarchy/__pycache__/
 .DS_Store
 build/
 .gradle/

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Append a Cloud Grand Council or Orchestrator event to .angie/cloud-agent-ledger.log
+# Append a Cloud Grand Council or Orchestrator event to .omarchy/cloud-agent-ledger.log
 set -euo pipefail
 
 ROLE="${1:-}"
@@ -19,11 +19,11 @@ if [[ -z "${ROW}" ]]; then
 fi
 RUNTIME="$(printf '%s' "${ROW}" | cut -d'|' -f3)"
 if [[ "${RUNTIME}" == "local" ]]; then
-  echo "error: '${ROLE}' is a local seat; use scripts/run_local_agent.sh ${ROLE}" >&2
+  echo "error: '${ROLE}' is a local seat; use scripts/run_local_agent.sh <packet.json>" >&2
   exit 2
 fi
 
-LEDGER="${ANGIE_CLOUD_LEDGER:-${ROOT}/.angie/cloud-agent-ledger.log}"
+LEDGER="${OMARCHY_CLOUD_LEDGER:-${ROOT}/.omarchy/cloud-agent-ledger.log}"
 mkdir -p "$(dirname "${LEDGER}")"
 {
   echo "---"

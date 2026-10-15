@@ -6,8 +6,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PROOF="${ANGIE_LOCAL_PROOF_LOG:-${ROOT}/.angie/local-agent-proof.log}"
-LEDGER="${ANGIE_CLOUD_LEDGER:-${ROOT}/.angie/cloud-agent-ledger.log}"
+PROOF="${OMARCHY_LOCAL_PROOF_LOG:-${ROOT}/.omarchy/local-agent-proof.log}"
+LEDGER="${OMARCHY_CLOUD_LEDGER:-${ROOT}/.omarchy/cloud-agent-ledger.log}"
 MARKDOWN=0
 if [[ "${1:-}" == "--markdown" ]]; then
   MARKDOWN=1
@@ -109,7 +109,7 @@ def pct(part, whole):
     return 100.0 * part / whole
 
 lines = []
-lines.append("A.N.G.I.E. local vs cloud agent report")
+lines.append("Omarchy local vs cloud agent report")
 lines.append(f"proof={proof_path}")
 lines.append(f"ledger={ledger_path}")
 lines.append("")
@@ -145,7 +145,7 @@ lines.append("  - Planning/review: separate cloud Tasks per role; coding: local 
 report = "\n".join(lines)
 print(report)
 
-out = root / ".angie" / "token-split-latest.txt"
+out = root / ".omarchy" / "token-split-latest.txt"
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(report + "\n")
 

@@ -20,7 +20,15 @@
 | **Host Tooling & Testing Jig** | *Python 3 + Bash* | *Coverage aggregation, UC traceability, artifact verification* |
 | **Cloud / Server** | *Docker / Rust / Python / Postgres / MQTT* | *API, storage, queues* |
 
-## 3. Use Cases (`UC-01..UC-XX`)
+## 3. Use Cases (`UC-00..UC-XX`)
+
+### `UC-00` — Bootstrap Testing Jig & Coverage Readout
+- **Goal:** Every project has a host command that produces `docs/TESTING_JIG_REPORT.md` with honest `UNMEASURED` cells when inputs are absent.
+- **Deterministic Behavior:** Running the jig never fabricates coverage percentages or pass counts.
+- **Acceptance Criteria (`Given / When / Then`):**
+  - Given no coverage artifacts, When the jig runs, Then the report marks metrics `UNMEASURED`.
+  - Given Gate G0, When a builder lands the jig script, Then only packet `allowed_files` are mutated in the isolated worktree.
+- **Fail-Closed Degradation:** Missing inputs → explicit `UNMEASURED`, never silent zeros.
 
 ### `UC-01` — *<Use Case Title>*
 - **Goal:**

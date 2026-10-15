@@ -41,7 +41,7 @@ Theme (Strategic Multi-Sprint Pillar)
 A User Story is **only** marked `Done` in [`docs/SPRINT_DASHBOARD.md`](SPRINT_DASHBOARD.md) when local `scrum` verifies all 8 criteria against Git:
 
 - [ ] **1. Spec Link:** Linked to a `UC-XX` / `US-XX` with `Given / When / Then` acceptance criteria.
-- [ ] **2. Local Provenance (`G0`):** Implemented via `scripts/run_local_agent.sh` with matching `packet_sha256` and `output_sha256` in `.angie/local-agent-proof.log`.
+- [ ] **2. Local Provenance (`G0`):** Implemented via `scripts/run_local_agent.sh` with matching `packet_sha256` and `output_sha256` in `.omarchy/local-agent-proof.log`.
 - [ ] **3. Testing Jig Green (`G1`):** Unit test suite 100% passing (`0` failures, `0` errors) and module coverage recorded in `docs/TESTING_JIG_REPORT.md`.
 - [ ] **4. Fail-Closed Negative Tests (`G4-Test`):** `mitnick` adversarial/corrupt/missing-input tests exist and pass.
 - [ ] **5. Cross-Family Peer Review (`G5`):** `moxie` (opposite local model family from coder) emitted `OMARCHY_VERDICT: APPROVE`.

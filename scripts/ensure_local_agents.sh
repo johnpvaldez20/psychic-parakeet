@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_FILE="${ROOT}/agents.lock"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
-PROOF_DIR="${ROOT}/.angie"
+PROOF_DIR="${ROOT}/.omarchy"
 mkdir -p "${PROOF_DIR}"
 
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }

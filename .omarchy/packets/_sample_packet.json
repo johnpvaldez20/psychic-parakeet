@@ -1,0 +1,20 @@
+{
+  "packet_id": "pkt-2026-0001",
+  "story_id": "STORY-101",
+  "uc_ids": [
+    "UC-101-A",
+    "UC-101-B"
+  ],
+  "model": "qwen3.8:27b-mlx",
+  "num_ctx": 16384,
+  "base_branch": "main",
+  "target_files": [
+    "src/ledger/transaction.py",
+    "tests/test_transaction.py"
+  ],
+  "instructions": "Implement idempotent two-phase commit validation in src/ledger/transaction.py satisfying STORY-101 and UC-101-A/B, and add unit tests in tests/test_transaction.py.",
+  "verification_commands": [
+    ["python3", "-m", "py_compile", "src/ledger/transaction.py"],
+    ["python3", "-m", "py_compile", "tests/test_transaction.py"]
+  ]
+}

@@ -12,7 +12,7 @@
 | Artifact Class | Permitted Hemisphere | Mechanism | Proof Required |
 |---|---|---|---|
 | Architecture (`00_`), Agent Laws (`01_`), Roadmap (`02_`), `PRODUCT_SPEC.md`, `G3`/`G4` Reviews, Grand Council Ballots | **Cloud Grand Council** (`linus`, `dhh`, `carmack`, `knuth`) | Separate Cursor Cloud Task per seat (distinct model family) | `scripts/log_cloud_agent.sh <seat>` + cloud run ID |
-| Production code (`app/**`, `src/**`), unit/functional tests, build scripts, Testing Jig, Scrum audits | **Local Council** (`qweny`, `moxie`, `mitnick`, `jobs`, `scrum`) | `scripts/run_local_agent.sh <seat>` against local Ollama | `.angie/local-agent-proof.log` (`packet_sha256` + `output_sha256` + `response_model`) |
+| Production code (`app/**`, `src/**`), unit/functional tests, build scripts, Testing Jig, Scrum audits | **Local Council** (models from packet / `agents.lock`) | `scripts/run_local_agent.sh <packet.json>` → `.omarchy/omarchy.py` 2PC kernel | `.omarchy/local-agent-proof.log` (`packet_sha256` + `tree_sha256` + `packet_id`) |
 | Packet compilation, applying local diffs, running the Testing Jig (`G1`) | **Orchestrator** (`parent`) | Host session | Git commit + `TESTING_JIG_REPORT.md` |
 
 ---
@@ -38,7 +38,7 @@ Workflows and prompts reference **only the Seat ID**, never a hardcoded model ve
 
 ### Hard Independence Rules
 1. **Cross-Family Review (`G5`):** Code written by Local Family A (`qweny`) **must** be peer-reviewed by Local Family B (`moxie`). Test code written by Local Family B (`mitnick`) **must** be peer-reviewed by Local Family A (`qweny`). Neither model family ever grades its own weights.
-2. **Zero Alias Routing:** Every seat has one name and one runtime. Passing a Cloud seat name (`linus`, `dhh`, `carmack`, `knuth`) to `scripts/run_local_agent.sh` is rejected with exit code `2`.
+2. **Zero Alias Routing / Sterilized CLI:** `scripts/run_local_agent.sh` accepts only a `.json` packet under `.omarchy/packets/` (or `--queue`). Ad-hoc strings and bare seat names are rejected (exit `64` / `66`).
 
 ---
 
@@ -47,5 +47,5 @@ Workflows and prompts reference **only the Seat ID**, never a hardcoded model ve
 | Mechanism | What Actually Runs | Can It Edit the Working Tree? | Valid Proof |
 |---|---|---|---|
 | **Cursor Cloud Task** (`environment: cloud`) | Independent Cloud VM on the seat's locked model family | Yes, on its cloud branch | `scripts/log_cloud_agent.sh` + cloud run ID |
-| **`scripts/run_local_agent.sh <seat>`** | Local Ollama HTTP call (`qwen3.8:27b-mlx` or `gemma4:31b-mlx`) with auto-injected `01_` laws + `00_` contracts | **No.** Prints to `stdout`; `parent` applies the patch and runs `G1` | `.angie/local-agent-proof.log` (`packet_sha256`, `output_sha256`, `response_model`) |
+| **`scripts/run_local_agent.sh <packet.json>`** / **`--batch`** | Thin pipe → [`.omarchy/omarchy.py`](.omarchy/omarchy.py) or [`.omarchy/batch_runner.py`](.omarchy/batch_runner.py). Single packet = 2PC. **`--batch`** = dependency-safe family waves (`depends_on`) with keep-warm inside a wave and `evict_model` in `finally` at every family boundary (even on 2PC abort). | **Phase 1** in `.omarchy/worktrees/<packet_id>`. **Phase 2** ff-merges iff gates exit 0; else nuked. Resume ids in `.omarchy/state/`. | `.omarchy/local-agent-proof.log` (`packet_sha256`, `prompt_sha256`, `tree_sha256`, `packet_id`, `trailer_status`) |
 | **Cursor Local Subagent** (`environment: local`) | Cursor subagent running on the **parent's cloud model** | Yes, directly in the working tree | **None.** Never counts as local Ollama tokens or `G0`/`G5` proof |
