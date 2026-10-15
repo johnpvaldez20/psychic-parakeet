@@ -9,6 +9,7 @@ deterministic gates, and serialized Ollama model loading/unloading
 from __future__ import annotations
 
 import argparse
+import re
 import datetime
 import fcntl
 import hashlib
@@ -650,8 +651,13 @@ def invoke_ollama_serial(
         ) from exc
 
     raw_response = body.get("response", "")
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```"):
+        # Strip markdown fences some local models wrap around JSON.
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
     try:
-        parsed = json.loads(raw_response)
+        parsed = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         raise OmarchyError(
             f"Model '{model}' returned invalid JSON: {raw_response[:500]}"
