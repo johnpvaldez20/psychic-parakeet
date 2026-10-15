@@ -617,11 +617,12 @@ def invoke_ollama_serial(
             f"{sorted(allowed)}"
         )
     enforce_memory_budget(model, num_ctx)
+    # Note: some Ollama/MLX builds return HTTP 501 for format=json ("structured
+    # output is unavailable"). Prompt contract still requires JSON; we parse it.
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "format": "json",
         "keep_alive": 0 if unload_after else "15m",
         "options": {
             "temperature": 0.0,
