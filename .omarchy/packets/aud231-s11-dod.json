@@ -1,0 +1,45 @@
+{
+  "packet_id": "aud231-s11-dod",
+  "story_id": "STORY-AUDIT-V231",
+  "uc_ids": [
+    "UC-AUDIT-V231-DOD"
+  ],
+  "depends_on": [
+    "aud231-s09-g4",
+    "aud231-s10-g5"
+  ],
+  "role": "scrum_audit",
+  "family": "local_family_a",
+  "num_ctx": 32768,
+  "base_branch": "main",
+  "target_files": [
+    "docs/GRAND_COUNCIL/v2.3.1_Test/SCRUM_DOD_AUDIT.md"
+  ],
+  "instructions": "You are scrum (role scrum_audit, Family A). Empirical DoD audit of this audit.\nWrite FULL file docs/GRAND_COUNCIL/v2.3.1_Test/SCRUM_DOD_AUDIT.md.\n\nDoD 1\u20138 table: | DoD # | Criterion | Status (MET/NOT_MET/UNMEASURED) | Source |\nProvenance table for packets aud231-s01-build, aud231-s09-g4, aud231-s10-g5, aud231-s11-dod\n(or MISSING). Family-separation table: note Core-5 cannot route Family A G5 of MOXIE_G4_TEST.md\n(scrum is Non-G5 \u2014 do not self-promote).\n\nEnd with OMARCHY_VERDICT trailer.\n\n<<<PROOF_PLACEHOLDER>>>\n<<<GITLOG_PLACEHOLDER>>>\n\nTrailers of prior deliverables will be inlined by parent before this packet runs.",
+  "verification_commands": [
+    [
+      "grep",
+      "-Eq",
+      "^OMARCHY_VERDICT: (APPROVE|APPROVE_WITH_FIXES|REQUEST_CHANGES|REJECT)$",
+      "docs/GRAND_COUNCIL/v2.3.1_Test/SCRUM_DOD_AUDIT.md"
+    ],
+    [
+      "grep",
+      "-Eq",
+      "^BLOCKING_COUNT: [0-9]+$",
+      "docs/GRAND_COUNCIL/v2.3.1_Test/SCRUM_DOD_AUDIT.md"
+    ],
+    [
+      "grep",
+      "-Eq",
+      "^CITED_LOCATIONS: ",
+      "docs/GRAND_COUNCIL/v2.3.1_Test/SCRUM_DOD_AUDIT.md"
+    ],
+    [
+      "grep",
+      "-Eq",
+      "aud231-s10-g5",
+      "docs/GRAND_COUNCIL/v2.3.1_Test/SCRUM_DOD_AUDIT.md"
+    ]
+  ]
+}
